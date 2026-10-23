@@ -149,18 +149,23 @@
             // Inline SVG instead of an emoji so it shows on every system and font.
             const wand = makeButton(uuid, "wandButton", "Magic wand: turn on, then click an area to select the connected part of similar colour. Use the strength slider to choose how similar; click again with a higher strength to grow it (Ctrl+Z undoes, Esc or click again to stop)", "");
             wand.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle"><path d="M4 20 L14 10"/><path d="M16 3v4M14 5h4M20 10v3M18.5 11.5h3"/></svg>';
+            // The slider is one more row in the toolbar's second box, built with Forge's own classes so it
+            // looks like Brush Width / Alpha / Softness and sits inside the floating toolbar (outside it, it
+            // stretched across the canvas and its label hid behind the toolbar).
             const wandPanel = document.createElement("div");
             wandPanel.id = `wandPanel_${uuid}`;
-            wandPanel.style.cssText = "display:none;align-items:center;gap:8px;padding:2px 8px;font-size:12px";
-            const wandLabel = document.createElement("span");
+            wandPanel.className = "forge-range-row";
+            wandPanel.style.display = "none";
+            const wandLabel = document.createElement("div");
+            wandLabel.className = "forge-toolbar-label";
             const wandSlider = document.createElement("input");
-            wandSlider.type = "range"; wandSlider.min = "0"; wandSlider.max = "100"; wandSlider.value = "15";
-            wandSlider.style.flex = "1";
-            const showStrength = () => { wandLabel.textContent = `Wand strength: ${wandSlider.value}`; };
+            wandSlider.type = "range"; wandSlider.className = "forge-toolbar-range";
+            wandSlider.min = "0"; wandSlider.max = "100"; wandSlider.value = "15";
+            const showStrength = () => { wandLabel.textContent = `Wand Strength (${wandSlider.value})`; };
             wandSlider.addEventListener("input", showStrength);
             showStrength();
             wandPanel.append(wandLabel, wandSlider);
-            bar.after(wandPanel);
+            boxB.append(wandPanel);
             const wandTolerance = () => Math.round(+wandSlider.value / 100 * 255);
 
             // one mode at a time: null, "select", "lasso" or "wand"
@@ -171,7 +176,7 @@
                 sel.style.outline = m === "select" ? "2px solid #f5a623" : "";
                 las.style.outline = m === "lasso" ? "2px solid #f5a623" : "";
                 wand.style.outline = m === "wand" ? "2px solid #f5a623" : "";
-                wandPanel.style.display = m === "wand" ? "flex" : "none";
+                wandPanel.style.display = m === "wand" ? "" : "none";  // "" = the row's own flex column
                 canvas.style.cursor = m ? "crosshair" : "";
             };
             const cancelLasso = () => { if (pts) ctx.putImageData(snap, 0, 0); pts = snap = null; };
