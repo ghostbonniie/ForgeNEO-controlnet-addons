@@ -83,8 +83,10 @@
         return url;
     }
 
-    // After a wand removal: clear small loose islands of selection (up to 0.05% of the picture) that sit right next
-    // to the removed area, such as specks the earlier clicks picked up. A large neighbouring area is left alone.
+    // After a wand removal: clear loose leftovers of selection that sit right next to the removed area. A leftover
+    // goes if it is a speck (up to 0.05% of the picture) or a thin sliver (narrower than about 2.4% of the picture's
+    // longer side, such as the dark rim where a shade changes) that has been cut off from the rest of the selection.
+    // Wide areas and anything still joined to the main selection are left alone.
     function tidyLeftovers(ctx, m, w, h) {
         const md = m.getContext("2d").getImageData(0, 0, w, h).data;
         let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -92,7 +94,8 @@
             if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
         }
         if (x1 < 0) return;
-        const R = 3, LIMIT = Math.max(50, Math.round(w * h * 0.0005));
+        const R = 3, SPECK = Math.max(50, Math.round(w * h * 0.0005)), SLIVER_MAX = Math.round(w * h * 0.05);
+        const HALF = Math.max(3, Math.round(Math.max(w, h) * 0.012));  // a piece with no (2*HALF+1)-px square inside is thin
         const img = ctx.getImageData(0, 0, w, h), a = img.data;
         const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
         const near = (x, y) => {  // within R px of the removed area?
@@ -100,12 +103,25 @@
                 for (let i = Math.max(x0, x - R); i <= Math.min(x1, x + R); i++) if (md[(j * w + i) * 4 + 3] > 127) return true;
             return false;
         };
+        const thin = comp => {
+            let bx0 = w, by0 = h, bx1 = 0, by1 = 0;
+            for (const n of comp) { const x = n % w, y = (n - x) / w; if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+            const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1, side = 2 * HALF + 1;
+            if (bw < side || bh < side) return true;
+            const W1 = bw + 1, sum = new Int32Array(W1 * (bh + 1));  // integral image of the piece
+            const m2 = new Uint8Array(bw * bh);
+            for (const n of comp) { const x = n % w; m2[(((n - x) / w) - by0) * bw + (x - bx0)] = 1; }
+            for (let y = 0; y < bh; y++) { let row = 0; for (let x = 0; x < bw; x++) { row += m2[y * bw + x]; sum[(y + 1) * W1 + x + 1] = sum[y * W1 + x + 1] + row; } }
+            for (let y = 0; y + side <= bh; y++) for (let x = 0; x + side <= bw; x++)
+                if (sum[(y + side) * W1 + x + side] - sum[y * W1 + x + side] - sum[(y + side) * W1 + x] + sum[y * W1 + x] === side * side) return false;
+            return true;
+        };
         let changed = false;
         for (let y = Math.max(0, y0 - R); y <= Math.min(h - 1, y1 + R); y++) for (let x = Math.max(0, x0 - R); x <= Math.min(w - 1, x1 + R); x++) {
             const s = y * w + x;
             if (seen[s] || !a[s * 4 + 3] || !near(x, y)) continue;
             const comp = [s]; let t = 0, big = false; seen[s] = 1; stack[t++] = s;
-            while (t) {  // 8-connected flood over the whole piece of remaining selection; only a small piece is a speck
+            while (t) {  // 8-connected flood over the whole piece of remaining selection
                 const q = stack[--t], qx = q % w, qy = (q - qx) / w;
                 for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
                     const nx = qx + dx, ny = qy + dy;
@@ -115,10 +131,10 @@
                     seen[n] = 1; stack[t++] = n;
                     if (big) continue;
                     comp.push(n);
-                    if (comp.length > LIMIT) { big = true; comp.length = 0; }
+                    if (comp.length > SLIVER_MAX) { big = true; comp.length = 0; }
                 }
             }
-            if (!big) { for (const n of comp) a[n * 4 + 3] = 0; changed = true; }
+            if (!big && (comp.length <= SPECK || thin(comp))) { for (const n of comp) a[n * 4 + 3] = 0; changed = true; }
         }
         if (changed) ctx.putImageData(img, 0, 0);
     }

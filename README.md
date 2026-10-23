@@ -25,8 +25,9 @@ Every click and drag **adds** to the selection, so there are three ways to take 
 - **− Eraser:** turn **−** on (it turns red) with no tool picked, set **Eraser Size**, and drag over what you want gone,
   like a rubber. This is the easiest way to clean up leftovers and specks.
 - **− with a tool:** turn **−** on, then pick ➰ Lasso, ✦ Select or 🪄 Magic wand and use it as usual. It removes instead
-  of adds, and the tool's outline turns red. The wand also takes out small gaps and loose specks next to the area it
-  removes (**Fill gaps** applies here too). Holding **Alt** while you click flips the switch for that one click. (On some
+  of adds, and the tool's outline turns red. The wand also takes out small gaps, loose specks and thin slivers (such as a dark rim where a shade changes) left next to
+  the area it removes (**Fill gaps** applies here too). A wide area of a different shade is not touched: click it
+  too, or use the eraser. Holding **Alt** while you click flips the switch for that one click. (On some
   Linux desktops the window manager takes Alt+click. If that happens, use the **−** button.)
 - **Shift + drag** is Forge's own freehand eraser.
 
