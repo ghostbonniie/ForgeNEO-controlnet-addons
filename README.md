@@ -56,3 +56,7 @@ Then restart Forge fully.
 |---|---|
 | `javascript/invert_mask.js` | Adds the buttons and draws the results through the canvas's own foreground textbox, so undo works and the backend receives the new mask. |
 | `scripts/click_select.py` | Adds one server route, `/invert_mask/select`, that runs SAM2 on the clicked point. |
+
+## License
+
+MIT. See [LICENSE](LICENSE).
