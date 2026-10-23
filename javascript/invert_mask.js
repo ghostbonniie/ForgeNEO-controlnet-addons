@@ -67,7 +67,7 @@
 
     // current drawing with the masked area taken out. Only the mask's alpha matters here, so the brush colour,
     // the high-contrast checker mode and soft or half-transparent strokes are all handled the same way.
-    async function subtractedDataUrl(uuid, maskUrl) {
+    async function subtractedDataUrl(uuid, maskUrl, tidy) {
         const src = document.getElementById(`drawingCanvas_${uuid}`);
         const w = src.width, h = src.height;
         const m = await maskAlphaCanvas(maskUrl, w, h);
@@ -77,9 +77,50 @@
         ctx.drawImage(src, 0, 0);
         ctx.globalCompositeOperation = "destination-out";
         ctx.drawImage(m, 0, 0);
+        if (tidy) tidyLeftovers(ctx, m, w, h);
         const url = out.toDataURL("image/png");
         if (!url.startsWith("data:image/png")) throw new Error("the canvas is empty");
         return url;
+    }
+
+    // After a wand removal: clear small loose islands of selection (up to 0.05% of the picture) that sit right next
+    // to the removed area, such as specks the earlier clicks picked up. A large neighbouring area is left alone.
+    function tidyLeftovers(ctx, m, w, h) {
+        const md = m.getContext("2d").getImageData(0, 0, w, h).data;
+        let x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (md[(y * w + x) * 4 + 3] > 127) {
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+        if (x1 < 0) return;
+        const R = 3, LIMIT = Math.max(50, Math.round(w * h * 0.0005));
+        const img = ctx.getImageData(0, 0, w, h), a = img.data;
+        const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
+        const near = (x, y) => {  // within R px of the removed area?
+            for (let j = Math.max(y0, y - R); j <= Math.min(y1, y + R); j++)
+                for (let i = Math.max(x0, x - R); i <= Math.min(x1, x + R); i++) if (md[(j * w + i) * 4 + 3] > 127) return true;
+            return false;
+        };
+        let changed = false;
+        for (let y = Math.max(0, y0 - R); y <= Math.min(h - 1, y1 + R); y++) for (let x = Math.max(0, x0 - R); x <= Math.min(w - 1, x1 + R); x++) {
+            const s = y * w + x;
+            if (seen[s] || !a[s * 4 + 3] || !near(x, y)) continue;
+            const comp = [s]; let t = 0, big = false; seen[s] = 1; stack[t++] = s;
+            while (t) {  // 8-connected flood over the whole piece of remaining selection; only a small piece is a speck
+                const q = stack[--t], qx = q % w, qy = (q - qx) / w;
+                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                    const nx = qx + dx, ny = qy + dy;
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    const n = ny * w + nx;
+                    if (seen[n] || !a[n * 4 + 3]) continue;
+                    seen[n] = 1; stack[t++] = n;
+                    if (big) continue;
+                    comp.push(n);
+                    if (comp.length > LIMIT) { big = true; comp.length = 0; }
+                }
+            }
+            if (!big) { for (const n of comp) a[n * 4 + 3] = 0; changed = true; }
+        }
+        if (changed) ctx.putImageData(img, 0, 0);
     }
 
     // current drawing + the lasso polygon filled in the brush style (or, with `subtract`, cut out of it)
@@ -303,6 +344,31 @@
             fillLabel.append(fillBox, "Fill gaps");
             wandPanel.append(wandLabel, wandSlider, fillLabel);
             boxB.append(wandPanel);
+            // Eraser: "−" on with no tool picked turns the mouse into a round eraser (drag to rub the selection out)
+            const erasePanel = document.createElement("div");
+            erasePanel.id = `erasePanel_${uuid}`;
+            erasePanel.className = "forge-range-row";
+            erasePanel.style.display = "none";
+            const eraseLabel = document.createElement("div");
+            eraseLabel.className = "forge-toolbar-label";
+            const eraseSlider = document.createElement("input");
+            eraseSlider.type = "range"; eraseSlider.className = "forge-toolbar-range";
+            eraseSlider.min = "4"; eraseSlider.max = "300"; eraseSlider.value = "40";
+            const showEraseSize = () => { eraseLabel.textContent = `Eraser Size (${eraseSlider.value})`; };
+            eraseSlider.addEventListener("input", () => { showEraseSize(); showRing(); });
+            showEraseSize();
+            erasePanel.append(eraseLabel, eraseSlider);
+            boxB.append(erasePanel);
+            const ring = document.createElement("div");  // circle that follows the mouse and shows the eraser size
+            ring.style.cssText = "position:fixed;pointer-events:none;border:2px solid #e5484d;border-radius:50%;display:none;z-index:9999;box-sizing:border-box";
+            document.body.append(ring);
+            let ringAt = null;
+            const showRing = () => {
+                if (!ringAt || !(subtract && !mode)) { ring.style.display = "none"; return; }
+                const r = canvas.getBoundingClientRect();
+                const d = +eraseSlider.value * r.width / canvas.width;
+                ring.style.cssText += `;display:block;width:${d}px;height:${d}px;left:${ringAt[0] - d / 2}px;top:${ringAt[1] - d / 2}px`;
+            };
             // strength 0-100 -> a Lab colour distance 0-40 (20 -> 8, 50 -> 20, 100 -> 40); skin from lit to shadow is
             // about 22 apart, a grey fence or sky is 30+ away from skin
             const wandTolerance = () => +wandSlider.value * 0.4;
@@ -317,13 +383,16 @@
                 sel.style.outline = mode === "select" ? `2px solid ${c}` : "";
                 las.style.outline = mode === "lasso" ? `2px solid ${c}` : "";
                 wand.style.outline = mode === "wand" ? `2px solid ${c}` : "";
+                const erasing = subtract && !mode;
+                erasePanel.style.display = erasing ? "" : "none";
+                canvas.style.cursor = erasing ? "none" : mode ? "crosshair" : "";
+                showRing();
             };
             const setMode = m => {
                 mode = m;
                 if (!m) subtract = false;  // turning the tool off also switches subtract off
                 paint();
                 wandPanel.style.display = m === "wand" ? "" : "none";  // "" = the row's own flex column
-                canvas.style.cursor = m ? "crosshair" : "";
             };
             const cancelLasso = () => { if (pts) ctx.putImageData(snap, 0, 0); pts = snap = null; };
             sel.addEventListener("click", e => { e.preventDefault(); cancelLasso(); setMode(mode === "select" ? null : "select"); });
@@ -356,6 +425,41 @@
                 cancelLasso();
                 if (done.length > 2) ta.value = lassoDataUrl(uuid, done, lassoSub);  // the canvas's own poller picks this up
             }, true);
+            // eraser: drag with "−" on and no tool picked. The strokes are rubbed straight out of the canvas as you
+            // drag (so you see them go), then the result goes through the textbox once, like every other tool.
+            let erasing = null;
+            const eraseTo = (x, y) => {
+                const [px, py] = erasing;
+                ctx.save();
+                ctx.globalCompositeOperation = "destination-out"; ctx.globalAlpha = 1;
+                ctx.strokeStyle = ctx.fillStyle = "#000"; ctx.lineCap = ctx.lineJoin = "round"; ctx.lineWidth = +eraseSlider.value;
+                ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x + 0.01, y); ctx.stroke();
+                ctx.beginPath(); ctx.arc(x, y, +eraseSlider.value / 2, 0, 7); ctx.fill();
+                ctx.restore();
+                erasing = [x, y];
+            };
+            container.addEventListener("pointerdown", e => {
+                if (mode || !subtract || e.button !== 0 || e.target !== canvas || !loaded()) return;
+                e.preventDefault(); e.stopPropagation();
+                canvas.setPointerCapture(e.pointerId);
+                erasing = xy(e);
+                eraseTo(...erasing);
+            }, true);
+            container.addEventListener("pointermove", e => {
+                if (mode || !subtract) return;
+                ringAt = [e.clientX, e.clientY]; showRing();
+                if (!erasing) return;
+                e.stopPropagation();
+                eraseTo(...xy(e));
+            }, true);
+            container.addEventListener("pointerleave", () => { ringAt = null; showRing(); });
+            container.addEventListener("pointerup", e => {
+                if (!erasing) return;
+                e.stopPropagation();
+                erasing = null;
+                const url = canvas.toDataURL("image/png");
+                if (url.startsWith("data:image/png")) ta.value = url;  // the canvas's own poller picks this up
+            }, true);
             // capture on the parent so this runs before ForgeCanvas starts a brush stroke
             container.addEventListener("pointerdown", async e => {
                 if (!mode || e.button !== 0 || e.target !== canvas || !loaded()) return;
@@ -374,8 +478,7 @@
                     const w = canvas.width, h = canvas.height;
                     if (x < 0 || y < 0 || x >= w || y >= h) return;
                     busy = true;
-                    // no gap filling while removing: remove exactly the colour area that was clicked
-                    try { ta.value = await (sub ? subtractedDataUrl : addedDataUrl)(uuid, wandMaskUrl(image, w, h, x, y, wandTolerance(), fillBox.checked && !sub)); await settle(); }
+                    try { ta.value = await (sub ? subtractedDataUrl : addedDataUrl)(uuid, wandMaskUrl(image, w, h, x, y, wandTolerance(), fillBox.checked), true); await settle(); }
                     catch (err) { alert("Magic wand failed: " + err); }
                     busy = false;
                     return;

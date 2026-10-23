@@ -9,7 +9,7 @@ An extension for **Forge** and **Forge Neo** that adds 5 buttons to every drawin
 | **✦ Select** | Turn it on, click a piece of clothing, and it selects that whole object (SAM2). Click more pieces to add them. |
 | **➰ Lasso** | Turn it on, drag around an area, and the inside gets filled. |
 | **🪄 Magic wand** | Turn it on, click an area, and it selects the part of similar colour that **touches your click**. A **strength slider** (0 to 100) sets how similar the colour has to be. It never jumps to a separate patch elsewhere in the picture, and it stops at edges, crisp or soft (outlines, the border of clothing, hair against skin), at **any** strength. **Fill gaps** (on by default) also takes small gaps that the selection completely surrounds, such as a shiny highlight on skin. See [Magic wand: which strength?](#magic-wand-which-strength) below. |
-| **− Subtract** | A switch, not a tool. Turn it on (it turns **red**) and ✦ Select, ➰ Lasso and 🪄 Magic wand **remove** from the selection instead of adding to it. Holding **Alt** while you click does the opposite of the switch for that one click. It switches itself off when you press `Esc` or turn the tool off. While removing, **Fill gaps** is off, so exactly the area you clicked is removed. See [Removing part of a selection](#removing-part-of-a-selection). |
+| **− Subtract / Eraser** | A switch (it turns **red** when on). With **no tool picked**, it is an **eraser**: drag over the selection to rub it out, and the **Eraser Size** slider sets the brush size (a red ring follows the mouse). With ✦ Select, ➰ Lasso or 🪄 Magic wand picked, those tools **remove** from the selection instead of adding to it. Holding **Alt** while you click does the opposite for that one click. It switches itself off when you press `Esc` or turn the tool off. See [Removing part of a selection](#removing-part-of-a-selection). |
 
 `Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ / 🪄 and − off.
 
@@ -22,15 +22,17 @@ from your click, so it stays local and does what the slider says.
 Every click and drag **adds** to the selection, so there are three ways to take something back out:
 
 - **Undo** (`Ctrl+Z`) removes the whole last step.
-- **− Subtract** removes just one area: turn **−** on (it turns red), then use ➰ Lasso, ✦ Select or 🪄 Magic wand as
-  usual. The outline of the tool turns red too, so you can see you are removing. Holding **Alt** while you click flips
-  the switch for that one click. (On some Linux desktops the window manager takes Alt+click. If that happens, use the
-  **−** button.)
+- **− Eraser:** turn **−** on (it turns red) with no tool picked, set **Eraser Size**, and drag over what you want gone,
+  like a rubber. This is the easiest way to clean up leftovers and specks.
+- **− with a tool:** turn **−** on, then pick ➰ Lasso, ✦ Select or 🪄 Magic wand and use it as usual. It removes instead
+  of adds, and the tool's outline turns red. The wand also takes out small gaps and loose specks next to the area it
+  removes (**Fill gaps** applies here too). Holding **Alt** while you click flips the switch for that one click. (On some
+  Linux desktops the window manager takes Alt+click. If that happens, use the **−** button.)
 - **Shift + drag** is Forge's own freehand eraser.
 
 Which tool to remove with:
 
-- **A piece of lace or any pattern:** use ➰ Lasso (draw around it) or ✦ Select. The wand sees lace as tiny separate bits,
+- **A piece of lace or any pattern:** use the eraser, ➰ Lasso (draw around it) or ✦ Select. The wand sees lace as tiny separate bits,
   so one click removes only a speck.
 - **A flat area of one colour:** the 🪄 wand works, at a low strength.
 - Clicking close to an edge can land on the other side of it. If the wrong thing disappears, press `Ctrl+Z`.
@@ -53,8 +55,8 @@ These numbers come from tests on one painted picture, so yours may differ a litt
 **Tips**
 
 - **Too little selected?** Raise the strength by 5 and click the same spot again. Each click adds to the selection.
-- **Too much selected?** Press `Ctrl+Z` and lower the strength by 5, or turn **−** on and take the extra bit out with
-  ➰ Lasso.
+- **Too much selected?** Press `Ctrl+Z` and lower the strength by 5, or turn **−** on and rub the extra bit out with
+  the eraser.
 - **Light and shaded skin are different shades.** The lit part around a highlight is not selected by a low strength. Click
   it as well, or use 35 or more.
 - **Leave Fill gaps on.** It takes small spots that the selection completely surrounds, such as a shiny highlight or an
