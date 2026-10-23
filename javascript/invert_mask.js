@@ -385,9 +385,10 @@
                 const d = +eraseSlider.value * r.width / canvas.width;
                 ring.style.cssText += `;display:block;width:${d}px;height:${d}px;left:${ringAt[0] - d / 2}px;top:${ringAt[1] - d / 2}px`;
             };
-            // strength 0-100 -> a Lab colour distance 0-40 (20 -> 8, 50 -> 20, 100 -> 40); skin from lit to shadow is
-            // about 22 apart, a grey fence or sky is 30+ away from skin
-            const wandTolerance = () => +wandSlider.value * 0.4;
+            // strength 0-100 -> a Lab colour distance 0-40; skin from lit to shadow is about 22 apart, a grey fence
+            // or sky is 30+ away from skin. Up to 20 it is a straight line (20 -> 8); above that it starts gentler and
+            // speeds up, so the middle of the slider has finer steps (40 -> 13, 60 -> 20, 80 -> 29, 100 -> 40)
+            const wandTolerance = () => +wandSlider.value <= 20 ? +wandSlider.value * 0.4 : 8 + 0.2 * (+wandSlider.value - 20) + 0.0025 * (+wandSlider.value - 20) ** 2;
 
             // one mode at a time: null, "select", "lasso" or "wand"
             let mode = null, busy = false, pts = null, snap = null, subtract = false, lassoSub = false;

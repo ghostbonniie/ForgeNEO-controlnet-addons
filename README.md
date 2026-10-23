@@ -48,10 +48,12 @@ Colours are compared the way the eye sees them: a change of **brightness** (shad
 | **0 to 8** | Almost nothing. | Too strict to be useful. |
 | **10 to 15** | A small patch of one shade. | A small part of the skin; staying close to clothing and lace edges. |
 | **20** (the default) | One band of one shade. | **A good place to start.** |
-| **30 to 50** | The whole shaded body part: all the connected skin of that shade. Lace, hair, sky and fence stay out. | Selecting a body area; flat areas such as sky (30 to 45). |
-| **60 and up** | It starts taking things of a similar colour, such as see-through pink lace over skin or tan hair. | Rarely what you want. |
+| **25 to 35** | A slightly wider band. | Fine steps between 20 and 40. |
+| **40 to 60** | The whole shaded body part: all the connected skin of that shade. Lace, hair, sky and fence stay out. | Selecting a body area; flat areas such as sky (40 to 55). |
+| **65 to 70** | It starts taking things of a similar colour, such as see-through pink lace over skin or tan hair. | Rarely what you want. |
+| **75 and up** | Most of the picture. | Almost never. |
 
-These numbers come from tests on one painted picture, so yours may differ a little. Move in steps of 5.
+These numbers come from tests on one painted picture, so yours may differ a little. The slider is finer in the middle (40 to 60) than at the top, so move in steps of 5.
 
 **Tips**
 
@@ -59,7 +61,7 @@ These numbers come from tests on one painted picture, so yours may differ a litt
 - **Too much selected?** Press `Ctrl+Z` and lower the strength by 5, or turn **−** on and rub the extra bit out with
   the eraser.
 - **Light and shaded skin are different shades.** The lit part around a highlight is not selected by a low strength. Click
-  it as well, or use 35 or more.
+  it as well, or use 45 or more.
 - **Leave Fill gaps on.** It takes small spots that the selection completely surrounds, such as a shiny highlight or an
   eye (anything under 1% of the picture). A large lit area is not a gap, so click it.
 - **Lace and other fine patterns** are full of tiny edges, so the wand selects very little of them. Use ✦ Select for lace.
