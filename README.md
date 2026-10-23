@@ -1,6 +1,6 @@
 # Forge Mask Tools
 
-An extension for **Forge** and **Forge Neo** that adds 4 buttons to every drawing canvas toolbar
+An extension for **Forge** and **Forge Neo** that adds 5 buttons to every drawing canvas toolbar
 (ControlNet units and img2img inpaint), next to Undo / Redo:
 
 | Button | What it does |
@@ -9,12 +9,31 @@ An extension for **Forge** and **Forge Neo** that adds 4 buttons to every drawin
 | **✦ Select** | Turn it on, click a piece of clothing, and it selects that whole object (SAM2). Click more pieces to add them. |
 | **➰ Lasso** | Turn it on, drag around an area, and the inside gets filled. |
 | **🪄 Magic wand** | Turn it on, click an area, and it selects the part of similar colour that **touches your click**. A **strength slider** (0 to 100) sets how similar the colour has to be. It never jumps to a separate patch elsewhere in the picture, and it stops at edges, crisp or soft (outlines, the border of clothing, hair against skin), at **any** strength. **Fill gaps** (on by default) also takes small gaps that the selection completely surrounds, such as a shiny highlight on skin. See [Magic wand: which strength?](#magic-wand-which-strength) below. |
+| **− Subtract** | A switch, not a tool. Turn it on (it turns **red**) and ✦ Select, ➰ Lasso and 🪄 Magic wand **remove** from the selection instead of adding to it. Holding **Alt** while you click does the opposite of the switch for that one click. It switches itself off when you press `Esc` or turn the tool off. While removing, **Fill gaps** is off, so exactly the area you clicked is removed. See [Removing part of a selection](#removing-part-of-a-selection). |
 
-`Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ / 🪄 off.
+`Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ / 🪄 and − off.
 
 **✦ Select or 🪄 Magic wand?** ✦ uses an AI model to pick the whole object you clicked, so it can include separate
 pieces that look alike elsewhere in the picture (for example both sleeves). 🪄 is plain colour matching that grows only
 from your click, so it stays local and does what the slider says.
+
+## Removing part of a selection
+
+Every click and drag **adds** to the selection, so there are three ways to take something back out:
+
+- **Undo** (`Ctrl+Z`) removes the whole last step.
+- **− Subtract** removes just one area: turn **−** on (it turns red), then use ➰ Lasso, ✦ Select or 🪄 Magic wand as
+  usual. The outline of the tool turns red too, so you can see you are removing. Holding **Alt** while you click flips
+  the switch for that one click. (On some Linux desktops the window manager takes Alt+click. If that happens, use the
+  **−** button.)
+- **Shift + drag** is Forge's own freehand eraser.
+
+Which tool to remove with:
+
+- **A piece of lace or any pattern:** use ➰ Lasso (draw around it) or ✦ Select. The wand sees lace as tiny separate bits,
+  so one click removes only a speck.
+- **A flat area of one colour:** the 🪄 wand works, at a low strength.
+- Clicking close to an edge can land on the other side of it. If the wrong thing disappears, press `Ctrl+Z`.
 
 ## Magic wand: which strength?
 
@@ -34,7 +53,8 @@ These numbers come from tests on one painted picture, so yours may differ a litt
 **Tips**
 
 - **Too little selected?** Raise the strength by 5 and click the same spot again. Each click adds to the selection.
-- **Too much selected?** Press `Ctrl+Z` and lower the strength by 5.
+- **Too much selected?** Press `Ctrl+Z` and lower the strength by 5, or turn **−** on and take the extra bit out with
+  ➰ Lasso.
 - **Light and shaded skin are different shades.** The lit part around a highlight is not selected by a low strength. Click
   it as well, or use 35 or more.
 - **Leave Fill gaps on.** It takes small spots that the selection completely surrounds, such as a shiny highlight or an
@@ -54,7 +74,7 @@ These numbers come from tests on one painted picture, so yours may differ a litt
 
 3. **Restart Forge fully.** Closing the browser tab is not enough, and neither is only reloading the UI.
 
-That is all. The four buttons appear on every canvas toolbar.
+That is all. The five buttons appear on every canvas toolbar.
 
 ### Manual install
 
@@ -71,7 +91,7 @@ Then restart Forge fully.
 
 ## Requirements
 
-- **◐ Invert**, **➰ Lasso** and **🪄 Magic wand** need nothing else.
+- **◐ Invert**, **➰ Lasso**, **🪄 Magic wand** and **− Subtract** need nothing else.
 - **✦ Select** needs the `ultralytics` package, which the **ADetailer** extension already installs
   (install ADetailer if you don't have it).
   It uses `models/adetailer/sam2.1_b.pt` if you have it. If not, the first click downloads it
@@ -81,12 +101,14 @@ Then restart Forge fully.
 
 - A button doesn't show: press `Ctrl+Shift+R` in the browser.
 - ✦ shows an error popup: the message says what is missing.
+- A click seems ignored: after a 🪄 or ✦ click, the next click is ignored for about a quarter of a second, so two clicks
+  cannot overlap and lose the first one. Just click again.
 
 ## What is in here
 
 | File | Purpose |
 |---|---|
-| `javascript/invert_mask.js` | Adds the buttons and draws the results through the canvas's own foreground textbox, so undo works and the backend receives the new mask. |
+| `javascript/invert_mask.js` | Adds the buttons (invert, click select, lasso, magic wand, subtract) and draws the results through the canvas's own foreground textbox, so undo works and the backend receives the new mask. The wand and subtract run entirely in the browser. |
 | `scripts/click_select.py` | Adds one server route, `/invert_mask/select`, that runs SAM2 on the clicked point. |
 
 ## License
