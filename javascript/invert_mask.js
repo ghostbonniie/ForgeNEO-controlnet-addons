@@ -77,8 +77,9 @@
     //  1. every pixel must be within `tol` (0-255, per channel) of the CLICKED colour, so a slow gradient cannot
     //     creep far away;
     //  2. it only moves between touching pixels, so a distant patch of the same colour is never taken;
-    //  3. it will not step across a sharp edge (outline, lace border, a different garment): the colour jump
-    //     between two neighbouring pixels must stay under a limit that grows with `tol`.
+    //  3. it will not step across an edge, crisp or soft (outline, lace border, hair against skin): the colour
+    //     jump to the next pixel, and to the pixel 3 steps ahead, must stay under a small limit that barely
+    //     depends on `tol`. Smooth shading changes a few units over 3 pixels, an edge changes dozens.
     // The clicked colour is the median of the 3x3 pixels around the click, so a single noisy or sparkly pixel
     // does not decide everything.
     function wandMaskUrl(image, w, h, x0, y0, tol, fill) {
@@ -98,23 +99,52 @@
         const mid = a => a.sort((m, n) => m - n)[a.length >> 1];  // median: one odd pixel cannot move it
         const r0 = mid(rs), g0 = mid(gs), b0 = mid(bs);
         px[s * 4] = r0; px[s * 4 + 1] = g0; px[s * 4 + 2] = b0;  // the first step compares against that colour too
-        const edge = 24 + tol * 0.5;  // biggest colour jump allowed between two neighbouring pixels
-        const near = (i, j) => {  // may the fill step from pixel i to its neighbour j?
-            const p = j * 4, q = i * 4;
-            return Math.abs(px[p] - r0) <= tol && Math.abs(px[p + 1] - g0) <= tol && Math.abs(px[p + 2] - b0) <= tol
-                && Math.abs(px[p] - px[q]) <= edge && Math.abs(px[p + 1] - px[q + 1]) <= edge && Math.abs(px[p + 2] - px[q + 2]) <= edge;
+        // The edge limit is nearly fixed (it does NOT open up with the strength slider): at a high strength the
+        // fill must still stop at hair, lace and outlines, and only the SHADING range grows.
+        const edge = 30 + tol * 0.1;
+        const same = (p, q, lim) => Math.abs(px[p] - px[q]) <= lim && Math.abs(px[p + 1] - px[q + 1]) <= lim && Math.abs(px[p + 2] - px[q + 2]) <= lim;
+        const go = (i, x, y, dx, dy) => {  // may the fill step from pixel i (at x, y) to its neighbour at (x+dx, y+dy)?
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= w || ny >= h) return false;
+            const j = ny * w + nx;
+            if (seen[j]) return false;
+            const p = j * 4;
+            if (Math.abs(px[p] - r0) > tol || Math.abs(px[p + 1] - g0) > tol || Math.abs(px[p + 2] - b0) > tol) return false;  // too far from the click
+            if (!same(p, i * 4, edge)) return false;  // a crisp edge between i and j
+            const fx = x + 3 * dx, fy = y + 3 * dy;  // a soft edge shows up over a few pixels: look 3 ahead too
+            if (fx >= 0 && fy >= 0 && fx < w && fy < h && !same((fy * w + fx) * 4, i * 4, edge)) return false;
+            seen[j] = 1;
+            return true;
         };
         const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
         const out = cx.createImageData(w, h);  // starts transparent black = not selected
         let top = 0;
         seen[s] = 1; stack[top++] = s;
         while (top) {
-            const i = stack[--top], x = i % w;
+            const i = stack[--top], x = i % w, y = (i - x) / w;
             out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = 255;
-            if (x > 0 && !seen[i - 1] && near(i, i - 1)) { seen[i - 1] = 1; stack[top++] = i - 1; }
-            if (x < w - 1 && !seen[i + 1] && near(i, i + 1)) { seen[i + 1] = 1; stack[top++] = i + 1; }
-            if (i >= w && !seen[i - w] && near(i, i - w)) { seen[i - w] = 1; stack[top++] = i - w; }
-            if (i < w * (h - 1) && !seen[i + w] && near(i, i + w)) { seen[i + w] = 1; stack[top++] = i + w; }
+            if (go(i, x, y, -1, 0)) stack[top++] = i - 1;
+            if (go(i, x, y, 1, 0)) stack[top++] = i + 1;
+            if (go(i, x, y, 0, -1)) stack[top++] = i - w;
+            if (go(i, x, y, 0, 1)) stack[top++] = i + w;
+        }
+        // Looking ahead stops the fill 2-3 pixels short of an edge, which would leave a visible gap along every
+        // outline. Grow the selection back by two pixels, but only into pixels still close to the clicked colour:
+        // a real edge pixel (an outline, hair, lace) is far from it, so the growth stops there.
+        const list = new Int32Array(w * h);
+        for (let round = 0; round < 2; round++) {
+            let m = 0;
+            for (let i = 0; i < w * h; i++) {
+                if (seen[i]) continue;
+                const x = i % w, p = i * 4;
+                if (!((x > 0 && seen[i - 1]) || (x < w - 1 && seen[i + 1]) || (i >= w && seen[i - w]) || (i < w * (h - 1) && seen[i + w]))) continue;
+                if (Math.abs(px[p] - r0) <= tol && Math.abs(px[p + 1] - g0) <= tol && Math.abs(px[p + 2] - b0) <= tol) list[m++] = i;
+            }
+            for (let k = 0; k < m; k++) {
+                const i = list[k];
+                seen[i] = 1;
+                out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = 255;
+            }
         }
         if (fill) {
             // Fill small gaps that the selection completely surrounds (a shiny highlight, an eye): find every
