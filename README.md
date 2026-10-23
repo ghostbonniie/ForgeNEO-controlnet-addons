@@ -8,7 +8,7 @@ An extension for **Forge** and **Forge Neo** that adds 4 buttons to every drawin
 | **◐ Invert** | Painted becomes unpainted and the other way round. ControlNet with preprocessor `None` keeps what is painted, so: paint the clothes, press ◐, and everything *except* the clothes is held. |
 | **✦ Select** | Turn it on, click a piece of clothing, and it selects that whole object (SAM2). Click more pieces to add them. |
 | **➰ Lasso** | Turn it on, drag around an area, and the inside gets filled. |
-| **🪄 Magic wand** | Turn it on, click an area, and it selects the part of similar colour that **touches your click**. A **strength slider** sets how similar the colour has to be: low strength takes only nearly identical colour, high strength reaches further. Click again with a higher strength to grow the selection. It never jumps to a separate patch elsewhere in the picture. |
+| **🪄 Magic wand** | Turn it on, click an area, and it selects the part of similar colour that **touches your click**. A **strength slider** sets how similar the colour has to be: low strength takes only nearly identical colour, high strength reaches further (the low end is fine-grained, so small nudges make small changes). Click again with a higher strength to grow the selection. It never jumps to a separate patch elsewhere in the picture, and it stops at sharp edges such as outlines and the borders of clothing: a higher strength tolerates bigger colour jumps, but a hard outline still stops it. |
 
 `Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ / 🪄 off.
 

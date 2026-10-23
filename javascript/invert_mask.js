@@ -72,10 +72,15 @@
         return out.toDataURL("image/png");
     }
 
-    // magic wand: the grey mask (white = selected) for the area CONNECTED to (x0, y0) whose colour is within
-    // `tol` (0-255, per channel) of the clicked pixel's colour. Compared with the clicked pixel, not with the
-    // neighbour, so a slow gradient cannot creep far away; and only touching pixels are taken, so a distant
-    // patch of the same colour is never selected.
+    // magic wand: the grey mask (white = selected) for the area CONNECTED to (x0, y0) that stays close to the
+    // colour at the click. Three rules keep it from running off:
+    //  1. every pixel must be within `tol` (0-255, per channel) of the CLICKED colour, so a slow gradient cannot
+    //     creep far away;
+    //  2. it only moves between touching pixels, so a distant patch of the same colour is never taken;
+    //  3. it will not step across a sharp edge (outline, lace border, a different garment): the colour jump
+    //     between two neighbouring pixels must stay under a limit that grows with `tol`.
+    // The clicked colour is the median of the 3x3 pixels around the click, so a single noisy or sparkly pixel
+    // does not decide everything.
     function wandMaskUrl(image, w, h, x0, y0, tol) {
         const c = document.createElement("canvas");
         c.width = w; c.height = h;
@@ -83,10 +88,21 @@
         cx.drawImage(image, 0, 0, w, h);
         const px = cx.getImageData(0, 0, w, h).data;
         const s = y0 * w + x0;
-        const r0 = px[s * 4], g0 = px[s * 4 + 1], b0 = px[s * 4 + 2];
-        const near = i => {
-            const p = i * 4;
-            return Math.abs(px[p] - r0) <= tol && Math.abs(px[p + 1] - g0) <= tol && Math.abs(px[p + 2] - b0) <= tol;
+        const rs = [], gs = [], bs = [];
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const x = x0 + dx, y = y0 + dy;
+            if (x < 0 || y < 0 || x >= w || y >= h) continue;
+            const p = (y * w + x) * 4;
+            rs.push(px[p]); gs.push(px[p + 1]); bs.push(px[p + 2]);
+        }
+        const mid = a => a.sort((m, n) => m - n)[a.length >> 1];  // median: one odd pixel cannot move it
+        const r0 = mid(rs), g0 = mid(gs), b0 = mid(bs);
+        px[s * 4] = r0; px[s * 4 + 1] = g0; px[s * 4 + 2] = b0;  // the first step compares against that colour too
+        const edge = 24 + tol * 0.5;  // biggest colour jump allowed between two neighbouring pixels
+        const near = (i, j) => {  // may the fill step from pixel i to its neighbour j?
+            const p = j * 4, q = i * 4;
+            return Math.abs(px[p] - r0) <= tol && Math.abs(px[p + 1] - g0) <= tol && Math.abs(px[p + 2] - b0) <= tol
+                && Math.abs(px[p] - px[q]) <= edge && Math.abs(px[p + 1] - px[q + 1]) <= edge && Math.abs(px[p + 2] - px[q + 2]) <= edge;
         };
         const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
         const out = cx.createImageData(w, h);  // starts transparent black = not selected
@@ -95,10 +111,10 @@
         while (top) {
             const i = stack[--top], x = i % w;
             out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = 255;
-            if (x > 0 && !seen[i - 1] && near(i - 1)) { seen[i - 1] = 1; stack[top++] = i - 1; }
-            if (x < w - 1 && !seen[i + 1] && near(i + 1)) { seen[i + 1] = 1; stack[top++] = i + 1; }
-            if (i >= w && !seen[i - w] && near(i - w)) { seen[i - w] = 1; stack[top++] = i - w; }
-            if (i < w * (h - 1) && !seen[i + w] && near(i + w)) { seen[i + w] = 1; stack[top++] = i + w; }
+            if (x > 0 && !seen[i - 1] && near(i, i - 1)) { seen[i - 1] = 1; stack[top++] = i - 1; }
+            if (x < w - 1 && !seen[i + 1] && near(i, i + 1)) { seen[i + 1] = 1; stack[top++] = i + 1; }
+            if (i >= w && !seen[i - w] && near(i, i - w)) { seen[i - w] = 1; stack[top++] = i - w; }
+            if (i < w * (h - 1) && !seen[i + w] && near(i, i + w)) { seen[i + w] = 1; stack[top++] = i + w; }
         }
         cx.putImageData(out, 0, 0);
         return c.toDataURL("image/png");
@@ -160,13 +176,14 @@
             wandLabel.className = "forge-toolbar-label";
             const wandSlider = document.createElement("input");
             wandSlider.type = "range"; wandSlider.className = "forge-toolbar-range";
-            wandSlider.min = "0"; wandSlider.max = "100"; wandSlider.value = "15";
+            wandSlider.min = "0"; wandSlider.max = "100"; wandSlider.value = "20";
             const showStrength = () => { wandLabel.textContent = `Wand Strength (${wandSlider.value})`; };
             wandSlider.addEventListener("input", showStrength);
             showStrength();
             wandPanel.append(wandLabel, wandSlider);
             boxB.append(wandPanel);
-            const wandTolerance = () => Math.round(+wandSlider.value / 100 * 255);
+            // squared, so the low end is fine-grained: 20 -> 10, 40 -> 41, 50 -> 64, 75 -> 143, 100 -> 255
+            const wandTolerance = () => Math.round((+wandSlider.value / 100) ** 2 * 255);
 
             // one mode at a time: null, "select", "lasso" or "wand"
             let mode = null, busy = false, pts = null, snap = null;
