@@ -81,7 +81,7 @@
     //     between two neighbouring pixels must stay under a limit that grows with `tol`.
     // The clicked colour is the median of the 3x3 pixels around the click, so a single noisy or sparkly pixel
     // does not decide everything.
-    function wandMaskUrl(image, w, h, x0, y0, tol) {
+    function wandMaskUrl(image, w, h, x0, y0, tol, fill) {
         const c = document.createElement("canvas");
         c.width = w; c.height = h;
         const cx = c.getContext("2d", { willReadFrequently: true });
@@ -115,6 +115,37 @@
             if (x < w - 1 && !seen[i + 1] && near(i, i + 1)) { seen[i + 1] = 1; stack[top++] = i + 1; }
             if (i >= w && !seen[i - w] && near(i, i - w)) { seen[i - w] = 1; stack[top++] = i - w; }
             if (i < w * (h - 1) && !seen[i + w] && near(i, i + w)) { seen[i + w] = 1; stack[top++] = i + w; }
+        }
+        if (fill) {
+            // Fill small gaps that the selection completely surrounds (a shiny highlight, an eye): find every
+            // unselected pixel that can reach the image border, the rest are enclosed pockets, and take each
+            // pocket that is small. A big enclosed pocket (a whole garment) is left alone.
+            const cap = Math.max(40, Math.round(w * h * 0.005));
+            const mark = new Uint8Array(w * h);  // 1 = unselected and connected to the border, 2 = a pocket being measured
+            let t = 0;
+            const around = (i, f) => {
+                const x = i % w;
+                if (x > 0) f(i - 1);
+                if (x < w - 1) f(i + 1);
+                if (i >= w) f(i - w);
+                if (i < w * (h - 1)) f(i + w);
+            };
+            const outside = j => { if (!seen[j] && !mark[j]) { mark[j] = 1; stack[t++] = j; } };
+            for (let x = 0; x < w; x++) { outside(x); outside((h - 1) * w + x); }
+            for (let y = 0; y < h; y++) { outside(y * w); outside(y * w + w - 1); }
+            while (t) around(stack[--t], outside);
+            const pocket = new Int32Array(w * h);
+            let n = 0;
+            const grow = j => { if (!seen[j] && !mark[j]) { mark[j] = 2; stack[t++] = j; } };
+            for (let s0 = 0; s0 < w * h; s0++) {
+                if (seen[s0] || mark[s0]) continue;
+                n = 0; t = 0; mark[s0] = 2; stack[t++] = s0;
+                while (t) { const i = stack[--t]; pocket[n++] = i; around(i, grow); }
+                if (n <= cap) for (let k = 0; k < n; k++) {
+                    const q = pocket[k] * 4;
+                    out.data[q] = out.data[q + 1] = out.data[q + 2] = out.data[q + 3] = 255;
+                }
+            }
         }
         cx.putImageData(out, 0, 0);
         return c.toDataURL("image/png");
@@ -180,7 +211,14 @@
             const showStrength = () => { wandLabel.textContent = `Wand Strength (${wandSlider.value})`; };
             wandSlider.addEventListener("input", showStrength);
             showStrength();
-            wandPanel.append(wandLabel, wandSlider);
+            const fillLabel = document.createElement("label");
+            fillLabel.className = "forge-toolbar-label";
+            fillLabel.style.cssText = "font-size:12px;gap:4px;cursor:pointer";
+            fillLabel.title = "Also select small gaps that the selection completely surrounds, like a shiny highlight. Big gaps (a whole piece of clothing) stay out.";
+            const fillBox = document.createElement("input");
+            fillBox.type = "checkbox"; fillBox.checked = true;
+            fillLabel.append(fillBox, "Fill gaps");
+            wandPanel.append(wandLabel, wandSlider, fillLabel);
             boxB.append(wandPanel);
             // squared, so the low end is fine-grained: 20 -> 10, 40 -> 41, 50 -> 64, 75 -> 143, 100 -> 255
             const wandTolerance = () => Math.round((+wandSlider.value / 100) ** 2 * 255);
@@ -242,7 +280,7 @@
                     const w = canvas.width, h = canvas.height;
                     if (x < 0 || y < 0 || x >= w || y >= h) return;
                     busy = true;
-                    try { ta.value = await addedDataUrl(uuid, wandMaskUrl(image, w, h, x, y, wandTolerance())); }
+                    try { ta.value = await addedDataUrl(uuid, wandMaskUrl(image, w, h, x, y, wandTolerance(), fillBox.checked)); }
                     catch (err) { alert("Magic wand failed: " + err); }
                     busy = false;
                     return;
