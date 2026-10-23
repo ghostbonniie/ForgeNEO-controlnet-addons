@@ -1,6 +1,6 @@
 # Forge Mask Tools
 
-An extension for **Forge** and **Forge Neo** that adds 3 buttons to every drawing canvas toolbar
+An extension for **Forge** and **Forge Neo** that adds 4 buttons to every drawing canvas toolbar
 (ControlNet units and img2img inpaint), next to Undo / Redo:
 
 | Button | What it does |
@@ -8,8 +8,13 @@ An extension for **Forge** and **Forge Neo** that adds 3 buttons to every drawin
 | **◐ Invert** | Painted becomes unpainted and the other way round. ControlNet with preprocessor `None` keeps what is painted, so: paint the clothes, press ◐, and everything *except* the clothes is held. |
 | **✦ Select** | Turn it on, click a piece of clothing, and it selects that whole object (SAM2). Click more pieces to add them. |
 | **➰ Lasso** | Turn it on, drag around an area, and the inside gets filled. |
+| **🪄 Magic wand** | Turn it on, click an area, and it selects the part of similar colour that **touches your click**. A **strength slider** sets how similar the colour has to be: low strength takes only nearly identical colour, high strength reaches further. Click again with a higher strength to grow the selection. It never jumps to a separate patch elsewhere in the picture. |
 
-`Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ off.
+`Ctrl+Z` undoes any of them. `Esc` (or clicking the lit button again) turns ✦ / ➰ / 🪄 off.
+
+**✦ Select or 🪄 Magic wand?** ✦ uses an AI model to pick the whole object you clicked, so it can include separate
+pieces that look alike elsewhere in the picture (for example both sleeves). 🪄 is plain colour matching that grows only
+from your click, so it stays local and does what the slider says.
 
 ## Install (from inside Forge Neo)
 
@@ -22,7 +27,7 @@ An extension for **Forge** and **Forge Neo** that adds 3 buttons to every drawin
 
 3. **Restart Forge fully.** Closing the browser tab is not enough, and neither is only reloading the UI.
 
-That is all. The three buttons appear on every canvas toolbar.
+That is all. The four buttons appear on every canvas toolbar.
 
 ### Manual install
 
@@ -39,7 +44,7 @@ Then restart Forge fully.
 
 ## Requirements
 
-- **◐ Invert** and **➰ Lasso** need nothing else.
+- **◐ Invert**, **➰ Lasso** and **🪄 Magic wand** need nothing else.
 - **✦ Select** needs the `ultralytics` package, which the **ADetailer** extension already installs
   (install ADetailer if you don't have it).
   It uses `models/adetailer/sam2.1_b.pt` if you have it. If not, the first click downloads it

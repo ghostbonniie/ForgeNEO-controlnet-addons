@@ -1,7 +1,9 @@
-// Two buttons on every Forge drawing canvas (ControlNet units, inpaint), lives outside modules_forge so a
+// Four buttons on every Forge drawing canvas (ControlNet units, inpaint), lives outside modules_forge so a
 // Forge update can't wipe it:
 //   ◐ Invert: painted becomes unpainted and the other way round.
 //   ✦ Click select: while on, each click on a piece of clothing adds that whole object (SAM2, server side).
+//   ➰ Lasso: drag around an area to fill it.
+//   Magic wand: click selects the connected area of similar colour; a strength slider sets how similar.
 // Both write through the canvas's own foreground textbox: ForgeCanvas polls it, redraws, and saves an
 // undo step, so Ctrl+Z undoes them and the backend gets the new mask (it reads alpha only).
 (function () {
@@ -70,6 +72,38 @@
         return out.toDataURL("image/png");
     }
 
+    // magic wand: the grey mask (white = selected) for the area CONNECTED to (x0, y0) whose colour is within
+    // `tol` (0-255, per channel) of the clicked pixel's colour. Compared with the clicked pixel, not with the
+    // neighbour, so a slow gradient cannot creep far away; and only touching pixels are taken, so a distant
+    // patch of the same colour is never selected.
+    function wandMaskUrl(image, w, h, x0, y0, tol) {
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const cx = c.getContext("2d", { willReadFrequently: true });
+        cx.drawImage(image, 0, 0, w, h);
+        const px = cx.getImageData(0, 0, w, h).data;
+        const s = y0 * w + x0;
+        const r0 = px[s * 4], g0 = px[s * 4 + 1], b0 = px[s * 4 + 2];
+        const near = i => {
+            const p = i * 4;
+            return Math.abs(px[p] - r0) <= tol && Math.abs(px[p + 1] - g0) <= tol && Math.abs(px[p + 2] - b0) <= tol;
+        };
+        const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
+        const out = cx.createImageData(w, h);  // starts transparent black = not selected
+        let top = 0;
+        seen[s] = 1; stack[top++] = s;
+        while (top) {
+            const i = stack[--top], x = i % w;
+            out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = 255;
+            if (x > 0 && !seen[i - 1] && near(i - 1)) { seen[i - 1] = 1; stack[top++] = i - 1; }
+            if (x < w - 1 && !seen[i + 1] && near(i + 1)) { seen[i + 1] = 1; stack[top++] = i + 1; }
+            if (i >= w && !seen[i - w] && near(i - w)) { seen[i - w] = 1; stack[top++] = i - w; }
+            if (i < w * (h - 1) && !seen[i + w] && near(i + w)) { seen[i + w] = 1; stack[top++] = i + w; }
+        }
+        cx.putImageData(out, 0, 0);
+        return c.toDataURL("image/png");
+    }
+
     function makeButton(uuid, id, title, text) {
         const btn = document.createElement("button");
         btn.id = `${id}_${uuid}`;
@@ -91,6 +125,8 @@
                 old.style.display = hide;
                 document.getElementById(`selectButton_${uuid}`).style.display = hide;
                 document.getElementById(`lassoButton_${uuid}`).style.display = hide;
+                const wb = document.getElementById(`wandButton_${uuid}`);
+                if (wb) wb.style.display = hide;
                 return;
             }
             const ta = document.querySelector(`#${CSS.escape(uuid)}.logical_image_foreground textarea`);
@@ -109,18 +145,39 @@
 
             const sel = makeButton(uuid, "selectButton", "Click select: turn on, then click each piece of clothing (Ctrl+Z undoes a click, Esc or click again to stop)", "✦");
             const las = makeButton(uuid, "lassoButton", "Lasso: turn on, then drag around an area to fill it (Ctrl+Z undoes, Esc or click again to stop)", "➰");
-            // one mode at a time: null, "select" or "lasso"
+            // Magic wand: click selects the connected area of similar colour; the slider sets how similar.
+            // Inline SVG instead of an emoji so it shows on every system and font.
+            const wand = makeButton(uuid, "wandButton", "Magic wand: turn on, then click an area to select the connected part of similar colour. Use the strength slider to choose how similar; click again with a higher strength to grow it (Ctrl+Z undoes, Esc or click again to stop)", "");
+            wand.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:middle"><path d="M4 20 L14 10"/><path d="M16 3v4M14 5h4M20 10v3M18.5 11.5h3"/></svg>';
+            const wandPanel = document.createElement("div");
+            wandPanel.id = `wandPanel_${uuid}`;
+            wandPanel.style.cssText = "display:none;align-items:center;gap:8px;padding:2px 8px;font-size:12px";
+            const wandLabel = document.createElement("span");
+            const wandSlider = document.createElement("input");
+            wandSlider.type = "range"; wandSlider.min = "0"; wandSlider.max = "100"; wandSlider.value = "15";
+            wandSlider.style.flex = "1";
+            const showStrength = () => { wandLabel.textContent = `Wand strength: ${wandSlider.value}`; };
+            wandSlider.addEventListener("input", showStrength);
+            showStrength();
+            wandPanel.append(wandLabel, wandSlider);
+            bar.after(wandPanel);
+            const wandTolerance = () => Math.round(+wandSlider.value / 100 * 255);
+
+            // one mode at a time: null, "select", "lasso" or "wand"
             let mode = null, busy = false, pts = null, snap = null;
             const ctx = canvas.getContext("2d");
             const setMode = m => {
                 mode = m;
                 sel.style.outline = m === "select" ? "2px solid #f5a623" : "";
                 las.style.outline = m === "lasso" ? "2px solid #f5a623" : "";
+                wand.style.outline = m === "wand" ? "2px solid #f5a623" : "";
+                wandPanel.style.display = m === "wand" ? "flex" : "none";
                 canvas.style.cursor = m ? "crosshair" : "";
             };
             const cancelLasso = () => { if (pts) ctx.putImageData(snap, 0, 0); pts = snap = null; };
             sel.addEventListener("click", e => { e.preventDefault(); cancelLasso(); setMode(mode === "select" ? null : "select"); });
             las.addEventListener("click", e => { e.preventDefault(); cancelLasso(); setMode(mode === "lasso" ? null : "lasso"); });
+            wand.addEventListener("click", e => { e.preventDefault(); cancelLasso(); setMode(mode === "wand" ? null : "wand"); });
             document.addEventListener("keydown", e => { if (mode && e.key === "Escape") { cancelLasso(); setMode(null); } });
             const xy = e => {
                 const r = canvas.getBoundingClientRect();
@@ -159,6 +216,15 @@
                 }
                 if (busy) return;
                 const [x, y] = xy(e).map(Math.round);
+                if (mode === "wand") {
+                    const w = canvas.width, h = canvas.height;
+                    if (x < 0 || y < 0 || x >= w || y >= h) return;
+                    busy = true;
+                    try { ta.value = await addedDataUrl(uuid, wandMaskUrl(image, w, h, x, y, wandTolerance())); }
+                    catch (err) { alert("Magic wand failed: " + err); }
+                    busy = false;
+                    return;
+                }
                 busy = true; sel.textContent = "…"; canvas.style.cursor = "progress";
                 try {
                     const res = await (await fetch("/invert_mask/select", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -172,6 +238,7 @@
             redo.after(inv);
             inv.after(sel);
             sel.after(las);
+            las.after(wand);
         });
     }
 
