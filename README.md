@@ -74,7 +74,7 @@ These numbers come from tests on one painted picture, so yours may differ a litt
 2. Paste this link and press **Install**:
 
    ```
-   https://github.com/ghostbonniie/ForgeNEO-controlnet-addons
+   https://github.com/ghostbonniie/Forge-Neo-Ultimate-Canvas-Helper
    ```
 
 3. **Restart Forge fully.** Closing the browser tab is not enough, and neither is only reloading the UI.
@@ -84,12 +84,12 @@ That is all. The five buttons appear on every canvas toolbar.
 ### Manual install
 
 Clone it into your Forge `extensions` folder, so the files end up at
-`<your forge>/extensions/ForgeNEO-controlnet-addons/javascript/invert_mask.js` and
-`<your forge>/extensions/ForgeNEO-controlnet-addons/scripts/click_select.py`:
+`<your forge>/extensions/Forge-Neo-Ultimate-Canvas-Helper/javascript/invert_mask.js` and
+`<your forge>/extensions/Forge-Neo-Ultimate-Canvas-Helper/scripts/click_select.py`:
 
 ```
 cd <your forge>/extensions
-git clone https://github.com/ghostbonniie/ForgeNEO-controlnet-addons
+git clone https://github.com/ghostbonniie/Forge-Neo-Ultimate-Canvas-Helper
 ```
 
 Then restart Forge fully.
