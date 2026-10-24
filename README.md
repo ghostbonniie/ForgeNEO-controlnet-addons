@@ -102,6 +102,17 @@ Then restart Forge fully.
   It uses `models/adetailer/sam2.1_b.pt` if you have it. If not, the first click downloads it
   (about 160 MB, one time), so that first click takes a while. After that a click takes under a second.
 
+## Optional: the large SAM model for ✦ Select
+
+✦ Select uses the base model, `sam2.1_b.pt`. If you want to try the larger `sam2.1_l.pt` (usually cleaner edges, but a
+bigger download and slower clicks), either:
+
+- put `sam2.1_l.pt` into `models/adetailer`. It is used automatically from then on, or
+- set the environment variable `FORGE_MASK_SAM=sam2.1_l.pt` before starting Forge. The first click then downloads it.
+
+Restart Forge fully afterwards. To go back to the base model, delete the large file (and unset the variable).
+This only affects ✦ Select. The 🪄 wand does not use any AI model.
+
 ## If something doesn't work
 
 - A button doesn't show: press `Ctrl+Shift+R` in the browser.

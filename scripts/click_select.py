@@ -9,7 +9,12 @@ import numpy as np
 from fastapi import Body
 from modules import paths, script_callbacks
 
-SAM_PATH = os.path.join(paths.models_path, "adetailer", "sam2.1_b.pt")
+SAM_DIR = os.path.join(paths.models_path, "adetailer")
+# Which SAM 2.1 to use. Default: the base model (sam2.1_b.pt). Opt in to the large one by putting sam2.1_l.pt into
+# models/adetailer (it is then picked up automatically), or by setting FORGE_MASK_SAM=sam2.1_l.pt, in which case
+# ultralytics downloads it by name the first time. Nothing changes for anyone who does neither.
+SAM_NAME = os.environ.get("FORGE_MASK_SAM") or ("sam2.1_l.pt" if os.path.isfile(os.path.join(SAM_DIR, "sam2.1_l.pt")) else "sam2.1_b.pt")
+SAM_PATH = os.path.join(SAM_DIR, SAM_NAME)
 _sam = None  # ponytail: loaded on first click, kept for the session (~0.3 GB); re-embeds the image every click
 
 
@@ -21,8 +26,8 @@ def on_app_started(_, app):
             import torch
             from ultralytics import SAM
 
-            if _sam is None:  # not in models/adetailer -> ultralytics downloads it by name once (~160 MB)
-                _sam = SAM(SAM_PATH if os.path.isfile(SAM_PATH) else "sam2.1_b.pt")
+            if _sam is None:  # not in models/adetailer -> ultralytics downloads it by name once (base: ~160 MB)
+                _sam = SAM(SAM_PATH if os.path.isfile(SAM_PATH) else SAM_NAME)
             raw = base64.b64decode(str(body["image"]).split(",", 1)[-1])
             img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
             h, w = img.shape[:2]
