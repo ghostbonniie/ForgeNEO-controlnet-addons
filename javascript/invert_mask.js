@@ -192,6 +192,22 @@
             const fz = labF((0.0193 * R + 0.1192 * G + 0.9505 * Bl) / 1.08883);
             L[i] = 116 * fy - 16; A[i] = 500 * (fx - fy); B[i] = 200 * (fy - fz);
         }
+        // The "close to the clicked colour" test reads a lightly smoothed copy (3x3 average): compression noise and
+        // dithering would otherwise flip single pixels in and out of the selection and leave it full of pinholes
+        // with a ragged edge. Edge detection below still reads the sharp original.
+        const sm = src => {
+            const t = new Float32Array(n), o = new Float32Array(n);
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {  // horizontal pass
+                const i = y * w + x, l = x > 0 ? i - 1 : i, r = x < w - 1 ? i + 1 : i;
+                t[i] = (src[l] + src[i] + src[r]) / 3;
+            }
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {  // vertical pass
+                const i = y * w + x, u = y > 0 ? i - w : i, d = y < h - 1 ? i + w : i;
+                o[i] = (t[u] + t[i] + t[d]) / 3;
+            }
+            return o;
+        };
+        const SL = sm(L), SA = sm(A), SB = sm(B);
         const s = y0 * w + x0;
         const ls = [], as = [], bs = [];
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -202,9 +218,17 @@
         const mid = a => a.sort((m, k) => m - k)[a.length >> 1];  // median: one odd pixel cannot move it
         const L0 = mid(ls), A0 = mid(as), B0 = mid(bs);
         L[s] = L0; A[s] = A0; B[s] = B0;  // the first step compares against that colour too
+        SL[s] = L0; SA[s] = A0; SB[s] = B0;
+        const sharpNear = j => { const dl = L_WEIGHT * (L[j] - L0), da = A[j] - A0, db = B[j] - B0; return dl * dl + da * da + db * db <= tol * tol; };
         const tol2 = tol * tol, step2 = EDGE_STEP * EDGE_STEP, span2 = EDGE_SPAN * EDGE_SPAN;
         const dist2 = (i, j) => { const dl = L_WEIGHT * (L[i] - L[j]), da = A[i] - A[j], db = B[i] - B[j]; return dl * dl + da * da + db * db; };
-        const nearClick = j => { const dl = L_WEIGHT * (L[j] - L0), da = A[j] - A0, db = B[j] - B0; return dl * dl + da * da + db * db <= tol2; };
+        // close to the click if EITHER the sharp or the smoothed colour is: noise makes the sharp one flicker, and a lone
+        // sparkle drags its neighbours' smoothed colours away, so each covers for the other
+        const nearClick = j => {
+            if (sharpNear(j)) return true;
+            const dl = L_WEIGHT * (SL[j] - L0), da = SA[j] - A0, db = SB[j] - B0;
+            return dl * dl + da * da + db * db <= tol2;
+        };
         const go = (i, x, y, dx, dy) => {  // may the fill step from pixel i (at x, y) to its neighbour at (x+dx, y+dy)?
             const nx = x + dx, ny = y + dy;
             if (nx < 0 || ny < 0 || nx >= w || ny >= h) return false;
@@ -237,7 +261,7 @@
                 if (seen[i]) continue;
                 const x = i % w;
                 if (!((x > 0 && seen[i - 1]) || (x < w - 1 && seen[i + 1]) || (i >= w && seen[i - w]) || (i < n - w && seen[i + w]))) continue;
-                if (nearClick(i)) list[m++] = i;
+                if (sharpNear(i)) list[m++] = i;  // sharp colours here: smoothing would pull in the edge itself
             }
             for (let k = 0; k < m; k++) {
                 const i = list[k];
@@ -245,11 +269,29 @@
                 out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = 255;
             }
         }
-        if (fill) {
-            // Fill small gaps that the selection completely surrounds (a shiny highlight, an eye): find every
-            // unselected pixel that can reach the image border, the rest are enclosed pockets, and take each
-            // pocket that is small. A big enclosed pocket (a whole garment) is left alone.
-            const cap = Math.max(40, Math.round(n * 0.01));
+        // Tidy the ragged edge noise leaves: two passes of a 3x3 majority vote (a pixel stays selected when at least 5
+        // of the 9 around it are), which closes pinholes and removes single-pixel specks and jaggies.
+        for (let pass = 0; pass < 2; pass++) {
+            const next = new Uint8Array(n);
+            for (let y = 0; y < h; y++) {
+                const y0r = y > 0 ? y - 1 : y, y1r = y < h - 1 ? y + 1 : y;
+                for (let x = 0; x < w; x++) {
+                    const x0r = x > 0 ? x - 1 : x, x1r = x < w - 1 ? x + 1 : x;
+                    let c = 0;
+                    for (let yy = y0r; yy <= y1r; yy++) for (let xx = x0r; xx <= x1r; xx++) c += seen[yy * w + xx];
+                    // at the picture border the missing neighbours count as the pixel itself, so the border does not erode
+                    c += (3 - (x1r - x0r + 1)) * (y1r - y0r + 1) * seen[y * w + x] + (3 - (y1r - y0r + 1)) * 3 * seen[y * w + x];
+                    next[y * w + x] = c >= 5 ? 1 : 0;
+                }
+            }
+            seen.set(next);
+        }
+        for (let i = 0; i < n; i++) out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = out.data[i * 4 + 3] = seen[i] ? 255 : 0;
+        // Pinholes (a few pixels, enclosed) are always filled; with "Fill gaps" on, bigger enclosed gaps are too.
+        {
+            // Find every unselected pixel that can reach the image border; the rest are enclosed pockets (a shiny
+            // highlight, an eye), and each pocket that is small is taken. A big one (a whole garment) is left alone.
+            const cap = fill ? Math.max(40, Math.round(n * 0.01)) : 16;
             const mark = new Uint8Array(n);  // 1 = unselected and connected to the border, 2 = a pocket being measured
             let t = 0;
             const around = (i, f) => {
